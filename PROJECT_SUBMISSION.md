@@ -135,41 +135,60 @@ directRate      = rateB / rateA
 ### 5.1 `DBConnection.java` — Database Connection (Singleton)
 
 ```java
-package com.currency.db;
+package com.currency.db;  // package declaration — organises this class under db sub-package
 
-import java.sql.*;
+import java.sql.*;         // imports Connection, DriverManager, SQLException, etc.
 
 public class DBConnection {
 
-    private static final String HOST     = "localhost";
-    private static final String PORT     = "3306";
-    private static final String DATABASE = "currency_db";
-    private static final String USERNAME = "root";
-    private static final String PASSWORD = "your_password";   // ← change this
+    // ── Connection parameters ─────────────────────────────────────────
+    private static final String HOST     = "localhost";       // MySQL server address
+    private static final String PORT     = "3306";            // default MySQL port
+    private static final String DATABASE = "currency_db";     // database name
+    private static final String USERNAME = "root";            // DB username
+    private static final String PASSWORD = "your_password";   // ← change to your password
 
+    // Build the JDBC connection URL from the parts above
+    // useSSL=false          → disable SSL (safe for local dev)
+    // serverTimezone=UTC    → avoid timezone mismatch errors
+    // allowPublicKeyRetrieval=true → needed for MySQL 8+ without SSL
     private static final String URL =
         "jdbc:mysql://" + HOST + ":" + PORT + "/" + DATABASE
         + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
 
+    // Singleton: only one Connection object is shared across the whole app
     private static Connection connection = null;
 
-    private DBConnection() {}   // prevent instantiation
+    // Private constructor — nobody can do "new DBConnection()"
+    private DBConnection() {}
 
+    /**
+     * Returns the shared Connection, creating it only if needed.
+     * Implements lazy initialisation — connects on first use.
+     */
     public static Connection getConnection() throws SQLException {
         try {
+            // Create a new connection only if none exists OR if it was closed
             if (connection == null || connection.isClosed()) {
-                Class.forName("com.mysql.cj.jdbc.Driver");  // load driver
+                // Dynamically load the MySQL JDBC driver class at runtime
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                // Open the actual TCP connection to MySQL
                 connection = DriverManager.getConnection(URL, USERNAME, PASSWORD);
             }
         } catch (ClassNotFoundException e) {
+            // Wrap driver-not-found into SQLException for uniform error handling
             throw new SQLException("MySQL JDBC Driver not found.", e);
         }
-        return connection;
+        return connection; // return the ready-to-use connection
     }
 
+    /**
+     * Closes the connection when the application exits.
+     * Called from CurrencyChangerApp.main() on shutdown.
+     */
     public static void closeConnection() {
         if (connection != null) {
-            try { connection.close(); } catch (SQLException e) { }
+            try { connection.close(); } catch (SQLException e) { /* ignore on close */ }
         }
     }
 }
@@ -186,24 +205,32 @@ public class DBConnection {
 ### 5.2 `Currency.java` — Model / POJO
 
 ```java
-package com.currency.model;
+package com.currency.model;  // groups all model/entity classes
 
 public class Currency {
-    private int    id;
-    private String code;       // e.g. "USD"
-    private String name;       // e.g. "US Dollar"
-    private double rateToUSD;  // e.g. 83.5 for INR
-    private String symbol;     // e.g. "Rs"
+    // Each field maps to a column in the `currencies` table
+    private int    id;          // auto-incremented primary key (set by DB)
+    private String code;        // 3-letter ISO code  e.g. "USD", "INR"
+    private String name;        // full currency name e.g. "US Dollar"
+    private double rateToUSD;   // how many units of this currency = 1 USD
+    private String symbol;      // display symbol    e.g. "$", "Rs", "€"
 
-    public Currency() {}
+    public Currency() {}   // no-arg constructor required by some frameworks
+
+    // Parameterised constructor used when reading rows from ResultSet
     public Currency(int id, String code, String name, double rateToUSD, String symbol) {
-        this.id = id; this.code = code; this.name = name;
-        this.rateToUSD = rateToUSD; this.symbol = symbol;
+        this.id = id;
+        this.code = code;
+        this.name = name;
+        this.rateToUSD = rateToUSD;
+        this.symbol = symbol;
     }
-    // getters & setters ...
+    // getters & setters omitted for brevity — standard JavaBean style
 
+    // Used when printing currency list in the CLI version
     @Override
     public String toString() {
+        // %-5s = left-align code in 5 chars; %-25s = left-align name in 25 chars
         return String.format("%-5s | %-25s | %.4f | %s", code, name, rateToUSD, symbol);
     }
 }
@@ -218,19 +245,20 @@ A plain Java object (POJO) that maps 1-to-1 to a row in the `currencies` table. 
 
 ```java
 package com.currency.model;
-import java.sql.Timestamp;
+import java.sql.Timestamp;  // maps to MySQL TIMESTAMP column type
 
 public class ConversionHistory {
-    private int       id;
-    private String    fromCurrency;
-    private String    toCurrency;
-    private double    amount;
-    private double    convertedAmount;
-    private double    exchangeRate;
-    private Timestamp conversionTime;   // auto-set by MySQL
+    private int       id;               // primary key (auto-set by DB)
+    private String    fromCurrency;     // source currency code  e.g. "INR"
+    private String    toCurrency;       // target currency code  e.g. "EUR"
+    private double    amount;           // original amount entered by user
+    private double    convertedAmount;  // result after conversion
+    private double    exchangeRate;     // direct rate: toCurrency / fromCurrency
+    private Timestamp conversionTime;   // timestamp auto-set by MySQL CURRENT_TIMESTAMP
 
-    // constructors, getters, setters ...
+    // constructors, getters, setters omitted for brevity
 
+    // Formats history entry as a single readable line
     @Override
     public String toString() {
         return String.format("%s %.4f -> %s %.4f | Rate: %.6f | %s",
@@ -248,70 +276,85 @@ Maps to a row in `conversion_history`. `conversionTime` is populated from `CURRE
 ### 5.4 `CurrencyDAO.java` — Data Access Object
 
 ```java
-package com.currency.dao;
+package com.currency.dao;  // DAO layer — all direct DB access lives here
+
+// Imports omitted for brevity (Connection, PreparedStatement, ResultSet, etc.)
 
 public class CurrencyDAO {
 
-    // READ: all currencies ordered by code
+    // ── READ: fetch all currencies, sorted alphabetically by code ────────
     public List<Currency> getAllCurrencies() throws SQLException {
         List<Currency> list = new ArrayList<>();
+        // Simple SELECT — no user input, so a plain Statement is safe here
         String sql = "SELECT id,code,name,rate_to_usd,symbol FROM currencies ORDER BY code";
+        // try-with-resources: conn, stmt, rs are all auto-closed after the block
         try (Connection conn = DBConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
+            // Iterate every returned row and convert to a Currency object
             while (rs.next()) list.add(mapRow(rs));
         }
-        return list;
+        return list;  // empty list if no currencies in DB
     }
 
-    // READ: single currency by code (uses PreparedStatement → safe from SQL injection)
+    // ── READ: find one currency by its 3-letter code ─────────────────────
+    // Uses PreparedStatement (?) so user input cannot break the SQL query
     public Currency getCurrencyByCode(String code) throws SQLException {
         String sql = "SELECT * FROM currencies WHERE code = ?";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, code.toUpperCase().trim());
+            ps.setString(1, code.toUpperCase().trim());  // bind param 1, normalise case
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return mapRow(rs);
+                if (rs.next()) return mapRow(rs);  // found → return object
             }
         }
-        return null;
+        return null;  // not found → caller gets null (checked in service layer)
     }
 
-    // CREATE
+    // ── CREATE: insert a brand-new currency row ───────────────────────────
     public boolean addCurrency(Currency c) throws SQLException {
+        // ? placeholders prevent SQL injection for all four fields
         String sql = "INSERT INTO currencies (code,name,rate_to_usd,symbol) VALUES (?,?,?,?)";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, c.getCode()); ps.setString(2, c.getName());
-            ps.setDouble(3, c.getRateToUSD()); ps.setString(4, c.getSymbol());
-            return ps.executeUpdate() > 0;
+            ps.setString(1, c.getCode());      // bind code
+            ps.setString(2, c.getName());      // bind name
+            ps.setDouble(3, c.getRateToUSD()); // bind rate
+            ps.setString(4, c.getSymbol());    // bind symbol
+            return ps.executeUpdate() > 0;     // true if ≥1 row was inserted
         }
     }
 
-    // UPDATE rate
+    // ── UPDATE: change the rate_to_usd for an existing currency ──────────
     public boolean updateRate(String code, double rate) throws SQLException {
         String sql = "UPDATE currencies SET rate_to_usd = ? WHERE code = ?";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setDouble(1, rate); ps.setString(2, code.toUpperCase());
-            return ps.executeUpdate() > 0;
+            ps.setDouble(1, rate);              // bind new rate value
+            ps.setString(2, code.toUpperCase()); // bind code (always uppercase)
+            return ps.executeUpdate() > 0;      // true if a matching row existed
         }
     }
 
-    // DELETE
+    // ── DELETE: remove a currency row by its code ─────────────────────────
     public boolean deleteCurrency(String code) throws SQLException {
         String sql = "DELETE FROM currencies WHERE code = ?";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, code.toUpperCase());
-            return ps.executeUpdate() > 0;
+            ps.setString(1, code.toUpperCase()); // bind code
+            return ps.executeUpdate() > 0;        // true if row was found & deleted
         }
     }
 
-    // Map ResultSet row → Currency object
+    // ── Helper: convert one ResultSet row into a Currency object ──────────
     private Currency mapRow(ResultSet rs) throws SQLException {
-        return new Currency(rs.getInt("id"), rs.getString("code"),
-            rs.getString("name"), rs.getDouble("rate_to_usd"), rs.getString("symbol"));
+        return new Currency(
+            rs.getInt("id"),            // column: id
+            rs.getString("code"),       // column: code
+            rs.getString("name"),       // column: name
+            rs.getDouble("rate_to_usd"),// column: rate_to_usd
+            rs.getString("symbol")      // column: symbol
+        );
     }
 }
 ```
@@ -330,31 +373,64 @@ package com.currency.dao;
 
 public class ConversionHistoryDAO {
 
-    // Save a new conversion record
+    // ── SAVE: insert a new row every time a conversion is performed ───────
     public boolean saveConversion(ConversionHistory ch) throws SQLException {
+        // conversion_time is intentionally omitted — MySQL sets it via DEFAULT CURRENT_TIMESTAMP
         String sql = "INSERT INTO conversion_history "
                    + "(from_currency,to_currency,amount,converted_amount,exchange_rate) "
                    + "VALUES (?,?,?,?,?)";
-        // ... PreparedStatement insert
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, ch.getFromCurrency());    // e.g. "INR"
+            ps.setString(2, ch.getToCurrency());      // e.g. "EUR"
+            ps.setDouble(3, ch.getAmount());          // original amount
+            ps.setDouble(4, ch.getConvertedAmount()); // result
+            ps.setDouble(5, ch.getExchangeRate());    // direct rate
+            return ps.executeUpdate() > 0;
+        }
     }
 
-    // Get last N records, newest first
+    // ── READ: get the last N conversions, newest first ────────────────────
     public List<ConversionHistory> getRecentHistory(int limit) throws SQLException {
+        // ORDER BY conversion_time DESC → most recent records come first
+        // LIMIT ? → only fetch as many rows as the user requested (efficient)
         String sql = "SELECT * FROM conversion_history ORDER BY conversion_time DESC LIMIT ?";
-        // ... PreparedStatement query
+        List<ConversionHistory> list = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);  // bind the limit value
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(mapRow(rs));  // map each row
+            }
+        }
+        return list;
     }
 
-    // Filter by currency pair
+    // ── READ: filter history by a specific currency pair ──────────────────
     public List<ConversionHistory> getHistoryByPair(String from, String to) throws SQLException {
         String sql = "SELECT * FROM conversion_history "
                    + "WHERE from_currency=? AND to_currency=? "
-                   + "ORDER BY conversion_time DESC";
-        // ... PreparedStatement query
+                   + "ORDER BY conversion_time DESC";  // newest first
+        List<ConversionHistory> list = new ArrayList<>();
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, from.toUpperCase()); // e.g. "INR"
+            ps.setString(2, to.toUpperCase());   // e.g. "EUR"
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(mapRow(rs));
+            }
+        }
+        return list;
     }
 
-    // Clear all records
+    // ── DELETE: wipe the entire history table ─────────────────────────────
     public boolean clearHistory() throws SQLException {
-        // DELETE FROM conversion_history
+        // Simple Statement is fine here — no user parameters involved
+        try (Connection conn = DBConnection.getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("DELETE FROM conversion_history");
+            return true;
+        }
     }
 }
 ```
@@ -371,37 +447,50 @@ package com.currency.service;
 
 public class CurrencyService {
 
-    private final CurrencyDAO         currencyDAO = new CurrencyDAO();
-    private final ConversionHistoryDAO historyDAO = new ConversionHistoryDAO();
+    // Instantiate DAOs once — they are stateless so a single instance is fine
+    private final CurrencyDAO          currencyDAO = new CurrencyDAO();
+    private final ConversionHistoryDAO historyDAO  = new ConversionHistoryDAO();
 
+    /**
+     * Core conversion method.
+     * Formula: result = (amount / fromRate) * toRate
+     * Returns -1 if either currency code is not found in the DB.
+     */
     public double convert(String fromCode, String toCode, double amount) throws SQLException {
+        // Fetch both currencies from DB via DAO
         Currency from = currencyDAO.getCurrencyByCode(fromCode);
         Currency to   = currencyDAO.getCurrencyByCode(toCode);
-        if (from == null || to == null) return -1;   // signal: not found
 
+        // If either code is missing, signal failure with -1
+        if (from == null || to == null) return -1;
+
+        // Step 1: convert source amount to USD (common base)
         double amountInUSD     = amount / from.getRateToUSD();
+        // Step 2: convert USD amount to target currency
         double convertedAmount = amountInUSD * to.getRateToUSD();
+        // Step 3: compute the direct exchange rate between the two currencies
         double directRate      = to.getRateToUSD() / from.getRateToUSD();
 
-        // Automatically log every conversion
+        // Automatically log every successful conversion to the history table
         historyDAO.saveConversion(new ConversionHistory(
             fromCode, toCode, amount, convertedAmount, directRate));
 
-        return convertedAmount;
+        return convertedAmount; // UI will display this
     }
 
-    // All other methods simply delegate to DAOs
-    public List<Currency>          getAllCurrencies()          throws SQLException { return currencyDAO.getAllCurrencies(); }
-    public boolean                 addCurrency(Currency c)    throws SQLException { return currencyDAO.addCurrency(c); }
-    public boolean                 updateRate(String c, double r) throws SQLException { return currencyDAO.updateRate(c,r); }
-    public boolean                 deleteCurrency(String c)   throws SQLException { return currencyDAO.deleteCurrency(c); }
-    public List<ConversionHistory> getRecentHistory(int n)    throws SQLException { return historyDAO.getRecentHistory(n); }
-    public List<ConversionHistory> getHistoryByPair(String f, String t) throws SQLException { return historyDAO.getHistoryByPair(f,t); }
-    public boolean                 clearHistory()             throws SQLException { return historyDAO.clearHistory(); }
+    // ── Delegation methods — thin wrappers around DAO calls ───────────────
+    // (Service layer keeps UI completely decoupled from DAO internals)
+    public List<Currency>          getAllCurrencies()                throws SQLException { return currencyDAO.getAllCurrencies(); }
+    public boolean                 addCurrency(Currency c)          throws SQLException { return currencyDAO.addCurrency(c); }
+    public boolean                 updateRate(String c, double r)   throws SQLException { return currencyDAO.updateRate(c, r); }
+    public boolean                 deleteCurrency(String c)         throws SQLException { return currencyDAO.deleteCurrency(c); }
+    public List<ConversionHistory> getRecentHistory(int n)          throws SQLException { return historyDAO.getRecentHistory(n); }
+    public List<ConversionHistory> getHistoryByPair(String f, String t) throws SQLException { return historyDAO.getHistoryByPair(f, t); }
+    public boolean                 clearHistory()                   throws SQLException { return historyDAO.clearHistory(); }
 }
 ```
 
-**How it works:**  
+**How it works:**
 - The **only place** the conversion formula lives. The UI and DAO layers have zero knowledge of it.
 - Every successful conversion is **automatically saved** to history — the caller doesn't need to do anything extra.
 - Returns `-1` when a currency code is not found, which the UI interprets as an error.
@@ -414,24 +503,28 @@ The GUI is built as a single `JFrame` with a **left-anchored `JTabbedPane`** con
 
 #### Design System (constants at top of class)
 ```java
-// Dark colour palette
-private static final Color BG_DARK      = new Color(15,  17,  26);
-private static final Color BG_CARD      = new Color(24,  27,  42);
-private static final Color ACCENT       = new Color(99, 102, 241);  // indigo
-private static final Color SUCCESS      = new Color(34, 197,  94);  // green
-private static final Color DANGER       = new Color(239, 68,  68);  // red
-private static final Color TEXT_PRIMARY = new Color(241, 245, 249);
+// ── Colour palette — all colours defined once, reused everywhere ──────────
+private static final Color BG_DARK      = new Color(15,  17,  26);  // window background (darkest)
+private static final Color BG_CARD      = new Color(24,  27,  42);  // panel/card background
+private static final Color BG_INPUT     = new Color(32,  36,  56);  // text field background
+private static final Color ACCENT       = new Color(99, 102, 241);  // indigo — primary action colour
+private static final Color ACCENT_LIGHT = new Color(129, 140, 248); // lighter indigo for hover state
+private static final Color SUCCESS      = new Color(34,  197,  94); // green — successful result
+private static final Color DANGER       = new Color(239,  68,  68); // red   — error / delete action
+private static final Color TEXT_PRIMARY = new Color(241, 245, 249); // near-white — main text
+private static final Color TEXT_MUTED   = new Color(100, 116, 139); // grey — labels, hints
+private static final Color BORDER_COLOR = new Color(55,  65,  81);  // subtle border colour
 ```
 
 #### Application Startup Flow
 ```
 main()
-  └─ SwingUtilities.invokeLater(CurrencyConverterUI::new)
+  └─ SwingUtilities.invokeLater(CurrencyConverterUI::new)   ← ensures UI runs on Event Dispatch Thread
         └─ new CurrencyConverterUI()
-              ├─ buildHeader()         → top banner panel
-              ├─ buildTabs()           → 7-tab pane
-              ├─ refreshCurrencyComboBoxes()  → loads FROM/TO dropdowns from DB
-              └─ refreshCurrenciesTable()     → loads currencies tab from DB
+              ├─ buildHeader()                → top banner panel (title + subtitle)
+              ├─ buildTabs()                  → creates JTabbedPane with 7 tabs
+              ├─ refreshCurrencyComboBoxes()  → populates FROM/TO dropdowns from DB
+              └─ refreshCurrenciesTable()     → fills the Currencies tab JTable from DB
 ```
 
 #### Tab Summary
@@ -449,35 +542,57 @@ main()
 #### Convert Tab — Core Logic
 ```java
 private void doConvert() {
+    // Read selected values from the combo boxes
     String from   = (String) cbFrom.getSelectedItem();
     String to     = (String) cbTo.getSelectedItem();
+    // Parse the amount — throws NumberFormatException if user typed non-numeric text
     double amount = Double.parseDouble(tfAmount.getText().trim());
 
-    double result = service.convert(from, to, amount);  // calls service layer
+    // Delegate all logic to the service layer (which calls DAO → DB)
+    double result = service.convert(from, to, amount);
 
     if (result < 0) {
-        lblResult.setForeground(DANGER);
+        // Service returned -1 → one or both currency codes not found in DB
+        lblResult.setForeground(DANGER);   // turn result label red
         lblResult.setText("Not found");
     } else {
+        // Conversion succeeded — show result in green
         lblResult.setForeground(SUCCESS);
         lblResult.setText(String.format("%s %.4f  =  %s %.4f", from, amount, to, result));
-        lblRate.setText(String.format("1 %s  =  %.6f %s", from, result/amount, to));
+        // Also display the direct exchange rate below the main result
+        lblRate.setText(String.format("1 %s  =  %.6f %s", from, result / amount, to));
     }
 }
 ```
 
 #### UI Factory Methods (reusable helpers)
 ```java
-// Every text field is styled the same way
-private JTextField styledField(String text) { ... }
+// Every text field is created with the same dark styling — DRY principle
+private JTextField styledField(String text) {
+    JTextField tf = new JTextField(text, 16);
+    tf.setBackground(BG_INPUT);     // dark input background
+    tf.setForeground(TEXT_PRIMARY); // light text colour
+    tf.setCaretColor(ACCENT_LIGHT); // blinking cursor = indigo
+    tf.setFont(FONT_LABEL);
+    // CompoundBorder = outer LineBorder (visible edge) + inner EmptyBorder (padding)
+    tf.setBorder(new CompoundBorder(
+        new LineBorder(BORDER_COLOR, 1, true),
+        new EmptyBorder(6, 10, 6, 10)));
+    return tf;
+}
 
-// Buttons change shade on hover via MouseAdapter
+// Buttons change shade on hover — visual feedback via anonymous MouseAdapter
 private JButton accentButton(String text) {
     JButton b = new JButton(text);
-    b.setBackground(ACCENT);
+    b.setBackground(ACCENT);        // default: indigo
+    b.setForeground(Color.WHITE);
+    b.setFont(FONT_BOLD);
+    b.setFocusPainted(false);       // remove default focus rectangle
+    b.setBorderPainted(false);      // remove default border
+    b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); // pointer cursor on hover
     b.addMouseListener(new MouseAdapter() {
-        public void mouseEntered(MouseEvent e) { b.setBackground(ACCENT_LIGHT); }
-        public void mouseExited(MouseEvent e)  { b.setBackground(ACCENT); }
+        public void mouseEntered(MouseEvent e) { b.setBackground(ACCENT_LIGHT); } // lighten on hover
+        public void mouseExited(MouseEvent e)  { b.setBackground(ACCENT); }       // restore on exit
     });
     return b;
 }
