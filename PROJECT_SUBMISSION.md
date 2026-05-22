@@ -666,7 +666,106 @@ java -cp out:lib/mysql-connector-j-9.3.0.jar com.currency.CurrencyChangerApp
 
 ---
 
-## 9. Output — Application Screenshots & Sample Output
+## 9. Output — Application Screenshots
+
+> All screenshots below are taken from the live running application connected to MySQL.
+
+---
+
+### 9.1 Convert Tab — Initial State
+
+The Convert tab opens by default. Dropdowns are pre-populated from the database. The result card shows a placeholder until the user clicks **Convert**.
+
+![Convert Tab - Initial State](output/1.png)
+
+---
+
+### 9.2 Convert Tab — After Conversion (AED → INR)
+
+After selecting **AED → INR**, entering amount `100`, and clicking Convert, the result is displayed in **green** with the converted value and the direct exchange rate.
+
+![Convert Tab - Result](output/2.png)
+
+> **Result:** `AED 100.0000 = INR 2273.6555`  
+> **Rate:** `1 AED = 22.736555 INR`
+
+---
+
+### 9.3 Currencies Tab — All Supported Currencies
+
+Displays a scrollable read-only table of all 15 currencies from the `currencies` database table, sorted alphabetically by code.
+
+![Currencies Tab](output/4.png)
+
+---
+
+### 9.4 Add Currency Tab
+
+The form allows inserting a new currency. All four fields (Code, Name, Rate to USD, Symbol) are required before clicking **Add Currency**.
+
+![Add Currency Tab](output/5.png)
+
+---
+
+### 9.5 Update Rate Tab — Success Dialog
+
+After entering a currency code and a new rate and clicking **Update Rate**, a success dialog confirms the update was applied to the database.
+
+![Update Rate - Success](output/6.png)
+
+> `Rate for EUR updated.`
+
+---
+
+### 9.6 Delete Tab — Success Dialog
+
+After entering a currency code and confirming deletion, the row is removed from `currencies` and a success dialog is shown.
+
+![Delete Currency - Success](output/7.png)
+
+> `Currency EUR deleted.`
+
+---
+
+### 9.7 History Tab — Loaded Records (limit 5)
+
+Shows the last 5 conversion records from `conversion_history`, newest first. **Load** fetches data; **Clear All** (red button) deletes all records after confirmation.
+
+![History Tab - 5 Records](output/8.png)
+
+---
+
+### 9.8 History Tab — After Clear All
+
+After clicking **Clear All** and confirming, the table empties and a success dialog confirms all history was deleted from the database.
+
+![History Tab - Cleared](output/9.png)
+
+---
+
+### 9.9 History Tab — 20 Records View
+
+When limit is set to `20` and Load is clicked, up to 20 most recent conversions are displayed.
+
+![History Tab - 20 Records](output/3.png)
+
+---
+
+### 9.10 Database Output — MySQL Terminal
+
+Shows the actual MySQL terminal confirming the `currency_db` schema: both tables (`currencies`, `conversion_history`) and their full column structure via `DESCRIBE`.
+
+![MySQL Database Output](output/10.png)
+
+| Table | Columns | Key Constraints |
+|-------|---------|-----------------|
+| `currencies` | id, code, name, rate_to_usd, symbol, updated_at | PK: id · UNIQUE: code |
+| `conversion_history` | id, from_currency, to_currency, amount, converted_amount, exchange_rate, conversion_time | PK: id |
+
+---
+
+*Submitted by: Bhavna Sharma | GitHub: Bhavnasharma27/CurrencyConverter*
+
 
 ---
 
@@ -868,85 +967,6 @@ DELETE FROM currencies WHERE code = 'BRL';
 
 ---
 
-### 9.8 Tab 7 — Search History by Pair
-
-**Input:** From = `USD`, To = `INR`  
-**Output:**
-
-```
-╔═══════════════════════════════════════════════════════════════════════════╗
-║  Search History  From [ USD ]  To [ INR ]              [ Search ]        ║
-╠════════╦════════════╦════════╦════════════╦══════════════╦═══════════════╣
-║  From  ║  Amount    ║  To    ║  Converted ║  Rate        ║  Time         ║
-╠════════╬════════════╬════════╬════════════╬══════════════╬═══════════════╣
-║  USD   ║  100.0000  ║  INR   ║  8350.0000 ║  83.500000   ║  2026-05-22   ║
-║  USD   ║  250.0000  ║  INR   ║  20875.000 ║  83.500000   ║  2026-05-21   ║
-╚════════╩════════════╩════════╩════════════╩══════════════╩═══════════════╝
-```
-
-**No results case:**
-```
-  ┌──────────────────────────────────────────────────┐
-  │  ℹ  No history found for JPY → CHF.              │
-  └──────────────────────────────────────────────────┘
-```
-
----
-
-### 9.9 CLI Version Output (Console)
-
-Running `CurrencyChangerApp` produces the following console output:
-
-```
-+--------------------------------------------------+
-|         Currency Changer  (JDBC)                 |
-+--------------------------------------------------+
-
-+--------------------------------------------------+
-| 1. Convert Currency                              |
-| 2. View All Currencies                           |
-| 3. Add New Currency                              |
-| 4. Update Exchange Rate                          |
-| 5. Delete Currency                               |
-| 6. View Conversion History                       |
-| 7. Search History by Currency Pair               |
-| 8. Clear All History                             |
-| 0. Exit                                          |
-+--------------------------------------------------+
-Enter choice: 1
-
-From Currency Code: USD
-To Currency Code  : INR
-Amount            : 100
-USD 100.0000  =  INR 8350.0000
-
-Enter choice: 2
-
---- Supported Currencies ---
-Code  | Name                      | Rate/USD   | Symbol
-------------------------------------------------------------
-AED   | UAE Dirham                | 3.6725 | AED
-AUD   | Australian Dollar         | 1.5200 | A$
-EUR   | Euro                      | 0.9200 | EUR
-GBP   | British Pound             | 0.7900 | GBP
-INR   | Indian Rupee              | 83.5000 | Rs
-USD   | US Dollar                 | 1.0000 | $
-...
-
-Enter choice: 6
-How many recent conversions to view? 3
-
---- Conversion History (last 3) ---
-USD 100.0000 -> INR 8350.0000 | Rate: 83.500000 | 2026-05-22 06:30:01.0
-EUR 200.0000 -> GBP 171.7391  | Rate: 0.858696  | 2026-05-22 06:28:44.0
-INR 1000.000 -> EUR 11.0180   | Rate: 0.011018  | 2026-05-22 06:27:10.0
-
-Enter choice: 0
-
-Goodbye!
-```
-
----
 
 ### 9.10 Database Output (MySQL)
 
