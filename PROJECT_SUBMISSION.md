@@ -666,4 +666,326 @@ java -cp out:lib/mysql-connector-j-9.3.0.jar com.currency.CurrencyChangerApp
 
 ---
 
+## 9. Output — Application Screenshots & Sample Output
+
+---
+
+### 9.1 Application Window — Overall Layout
+
+When launched, the app opens as a dark-themed desktop window (860 × 620 px) with a header banner and a left-side tab navigation panel.
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║  💱  Currency Converter          Real-time exchange  |  JDBC powered    ║
+╠══════════════════╦═══════════════════════════════════════════════════════╣
+║  ⇄  Convert      ║                                                       ║
+║  ☰  Currencies   ║           [  Tab Content Area  ]                      ║
+║  ＋ Add Currency  ║                                                       ║
+║  ✎  Update Rate  ║                                                       ║
+║  ✕  Delete       ║                                                       ║
+║  ⟳  History      ║                                                       ║
+║  ⌕  Search Hist. ║                                                       ║
+╚══════════════════╩═══════════════════════════════════════════════════════╝
+```
+
+---
+
+### 9.2 Tab 1 — Convert Currency
+
+**Input:** Amount = `1000`, From = `INR`, To = `EUR`  
+**Output after clicking Convert:**
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║  Amount   [ 1000                ]                            ║
+║  From     [ INR ▼               ]                            ║
+║  To       [ EUR ▼               ]                            ║
+║                                                              ║
+║           [         Convert         ]                        ║
+║                                                              ║
+║  ┌──────────────────────────────────────────────────────┐   ║
+║  │   INR 1000.0000  =  EUR 11.0180          (green)     │   ║
+║  │   1 INR  =  0.011018 EUR                             │   ║
+║  └──────────────────────────────────────────────────────┘   ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Sample result values for common pairs:**
+
+| From | To  | Amount | Result       | Rate        |
+|------|-----|--------|--------------|-------------|
+| USD  | INR | 100    | 8350.0000    | 1 USD = 83.5 INR |
+| INR  | USD | 500    | 5.9880       | 1 INR = 0.011976 USD |
+| EUR  | GBP | 200    | 171.7391     | 1 EUR = 0.858696 GBP |
+| JPY  | CAD | 1000   | 8.6900       | 1 JPY = 0.008690 CAD |
+| USD  | AED | 50     | 183.6250     | 1 USD = 3.6725 AED |
+
+**Error case — invalid currency code entered:**
+```
+Result label (red):  Not found
+Sub-label:           One or both currency codes are invalid.
+```
+
+---
+
+### 9.3 Tab 2 — Supported Currencies Table
+
+Displays all currencies stored in the `currencies` table, sorted by code.
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║  Supported Currencies                          [ ⟳  Refresh ]        ║
+╠════════╦══════════════════════════╦════════════╦════════════════════╣
+║  Code  ║  Name                    ║  Rate/USD  ║  Symbol            ║
+╠════════╬══════════════════════════╬════════════╬════════════════════╣
+║  AED   ║  UAE Dirham              ║  3.6725    ║  AED               ║
+║  AUD   ║  Australian Dollar       ║  1.5200    ║  A$                ║
+║  CAD   ║  Canadian Dollar         ║  1.3600    ║  CA$               ║
+║  CHF   ║  Swiss Franc             ║  0.9000    ║  CHF               ║
+║  CNY   ║  Chinese Yuan            ║  7.2400    ║  CNY               ║
+║  EUR   ║  Euro                    ║  0.9200    ║  EUR               ║
+║  GBP   ║  British Pound           ║  0.7900    ║  GBP               ║
+║  HKD   ║  Hong Kong Dollar        ║  7.8200    ║  HK$               ║
+║  INR   ║  Indian Rupee            ║  83.5000   ║  Rs                ║
+║  JPY   ║  Japanese Yen            ║  156.5000  ║  JPY               ║
+║  KRW   ║  South Korean Won        ║  1340.0000 ║  KRW               ║
+║  NZD   ║  New Zealand Dollar      ║  1.6300    ║  NZ$               ║
+║  SAR   ║  Saudi Riyal             ║  3.7500    ║  SAR               ║
+║  SGD   ║  Singapore Dollar        ║  1.3400    ║  S$                ║
+║  USD   ║  US Dollar               ║  1.0000    ║  $                 ║
+╚════════╩══════════════════════════╩════════════╩════════════════════╝
+```
+
+---
+
+### 9.4 Tab 3 — Add New Currency
+
+**Input:** Code = `BRL`, Name = `Brazilian Real`, Rate = `4.97`, Symbol = `R$`  
+**Output:**
+
+```
+╔══════════════════════════════════════════╗
+║  Add New Currency                        ║
+║                                          ║
+║  Code (e.g. EUR)  [ BRL            ]     ║
+║  Name             [ Brazilian Real ]     ║
+║  Rate to USD      [ 4.97           ]     ║
+║  Symbol           [ R$             ]     ║
+║                                          ║
+║         [     Add Currency     ]         ║
+╚══════════════════════════════════════════╝
+
+  ┌─────────────────────────────────────┐
+  │  ✔  Currency BRL added successfully │   (Success dialog)
+  └─────────────────────────────────────┘
+```
+
+**SQL executed internally:**
+```sql
+INSERT INTO currencies (code, name, rate_to_usd, symbol)
+VALUES ('BRL', 'Brazilian Real', 4.97, 'R$');
+```
+
+---
+
+### 9.5 Tab 4 — Update Exchange Rate
+
+**Input:** Code = `INR`, New Rate = `84.2`  
+**Output:**
+
+```
+╔══════════════════════════════════════════╗
+║  Update Exchange Rate                    ║
+║                                          ║
+║  Currency Code    [ INR            ]     ║
+║  New Rate to USD  [ 84.2           ]     ║
+║                                          ║
+║         [     Update Rate     ]          ║
+╚══════════════════════════════════════════╝
+
+  ┌─────────────────────────────────┐
+  │  ✔  Rate for INR updated.       │   (Success dialog)
+  └─────────────────────────────────┘
+```
+
+**SQL executed internally:**
+```sql
+UPDATE currencies SET rate_to_usd = 84.2 WHERE code = 'INR';
+```
+
+---
+
+### 9.6 Tab 5 — Delete Currency
+
+**Input:** Code = `BRL`  
+**Output — confirmation dialog first:**
+
+```
+  ┌────────────────────────────────────────────────────┐
+  │  ⚠  Delete currency "BRL"? This cannot be undone.  │
+  │                  [ Yes ]   [ No ]                   │
+  └────────────────────────────────────────────────────┘
+
+  After clicking Yes:
+  ┌─────────────────────────────┐
+  │  ✔  Currency BRL deleted.   │
+  └─────────────────────────────┘
+```
+
+**SQL executed internally:**
+```sql
+DELETE FROM currencies WHERE code = 'BRL';
+```
+
+---
+
+### 9.7 Tab 6 — Conversion History
+
+**Input:** Last `5` records, click Load  
+**Output:**
+
+```
+╔═════════════════════════════════════════════════════════════════════════════╗
+║  Conversion History      Last [ 5  ] records    [ Load ]  [ Clear All ]    ║
+╠════════╦════════════╦════════╦════════════╦══════════════╦══════════════════╣
+║  From  ║  Amount    ║  To    ║  Converted ║  Rate        ║  Time            ║
+╠════════╬════════════╬════════╬════════════╬══════════════╬══════════════════╣
+║  INR   ║  1000.0000 ║  EUR   ║  11.0180   ║  0.011018    ║  2026-05-22 ...  ║
+║  USD   ║  100.0000  ║  INR   ║  8350.0000 ║  83.500000   ║  2026-05-22 ...  ║
+║  EUR   ║  200.0000  ║  GBP   ║  171.7391  ║  0.858696    ║  2026-05-22 ...  ║
+║  JPY   ║  1000.0000 ║  CAD   ║  8.6900    ║  0.008690    ║  2026-05-22 ...  ║
+║  USD   ║  50.0000   ║  AED   ║  183.6250  ║  3.672500    ║  2026-05-22 ...  ║
+╚════════╩════════════╩════════╩════════════╩══════════════╩══════════════════╝
+```
+
+**Clear All — confirmation dialog:**
+```
+  ┌──────────────────────────────────────┐
+  │  ⚠  Clear ALL conversion history?    │
+  │          [ Yes ]   [ No ]            │
+  └──────────────────────────────────────┘
+```
+
+---
+
+### 9.8 Tab 7 — Search History by Pair
+
+**Input:** From = `USD`, To = `INR`  
+**Output:**
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║  Search History  From [ USD ]  To [ INR ]              [ Search ]        ║
+╠════════╦════════════╦════════╦════════════╦══════════════╦═══════════════╣
+║  From  ║  Amount    ║  To    ║  Converted ║  Rate        ║  Time         ║
+╠════════╬════════════╬════════╬════════════╬══════════════╬═══════════════╣
+║  USD   ║  100.0000  ║  INR   ║  8350.0000 ║  83.500000   ║  2026-05-22   ║
+║  USD   ║  250.0000  ║  INR   ║  20875.000 ║  83.500000   ║  2026-05-21   ║
+╚════════╩════════════╩════════╩════════════╩══════════════╩═══════════════╝
+```
+
+**No results case:**
+```
+  ┌──────────────────────────────────────────────────┐
+  │  ℹ  No history found for JPY → CHF.              │
+  └──────────────────────────────────────────────────┘
+```
+
+---
+
+### 9.9 CLI Version Output (Console)
+
+Running `CurrencyChangerApp` produces the following console output:
+
+```
++--------------------------------------------------+
+|         Currency Changer  (JDBC)                 |
++--------------------------------------------------+
+
++--------------------------------------------------+
+| 1. Convert Currency                              |
+| 2. View All Currencies                           |
+| 3. Add New Currency                              |
+| 4. Update Exchange Rate                          |
+| 5. Delete Currency                               |
+| 6. View Conversion History                       |
+| 7. Search History by Currency Pair               |
+| 8. Clear All History                             |
+| 0. Exit                                          |
++--------------------------------------------------+
+Enter choice: 1
+
+From Currency Code: USD
+To Currency Code  : INR
+Amount            : 100
+USD 100.0000  =  INR 8350.0000
+
+Enter choice: 2
+
+--- Supported Currencies ---
+Code  | Name                      | Rate/USD   | Symbol
+------------------------------------------------------------
+AED   | UAE Dirham                | 3.6725 | AED
+AUD   | Australian Dollar         | 1.5200 | A$
+EUR   | Euro                      | 0.9200 | EUR
+GBP   | British Pound             | 0.7900 | GBP
+INR   | Indian Rupee              | 83.5000 | Rs
+USD   | US Dollar                 | 1.0000 | $
+...
+
+Enter choice: 6
+How many recent conversions to view? 3
+
+--- Conversion History (last 3) ---
+USD 100.0000 -> INR 8350.0000 | Rate: 83.500000 | 2026-05-22 06:30:01.0
+EUR 200.0000 -> GBP 171.7391  | Rate: 0.858696  | 2026-05-22 06:28:44.0
+INR 1000.000 -> EUR 11.0180   | Rate: 0.011018  | 2026-05-22 06:27:10.0
+
+Enter choice: 0
+
+Goodbye!
+```
+
+---
+
+### 9.10 Database Output (MySQL)
+
+After running several conversions, querying the database directly shows:
+
+```sql
+-- Check stored currencies
+SELECT code, name, rate_to_usd, symbol FROM currencies ORDER BY code;
+```
+```
++------+----------------------+-------------+--------+
+| code | name                 | rate_to_usd | symbol |
++------+----------------------+-------------+--------+
+| AED  | UAE Dirham           |      3.6725 | AED    |
+| AUD  | Australian Dollar    |       1.52  | A$     |
+| EUR  | Euro                 |       0.92  | EUR    |
+| GBP  | British Pound        |       0.79  | GBP    |
+| INR  | Indian Rupee         |        83.5 | Rs     |
+| USD  | US Dollar            |           1 | $      |
+| ...  | ...                  |         ... | ...    |
++------+----------------------+-------------+--------+
+15 rows in set
+```
+
+```sql
+-- Check conversion history
+SELECT from_currency, to_currency, amount, converted_amount, exchange_rate, conversion_time
+FROM conversion_history ORDER BY conversion_time DESC LIMIT 5;
+```
+```
++---------------+-------------+---------+------------------+---------------+---------------------+
+| from_currency | to_currency | amount  | converted_amount | exchange_rate | conversion_time     |
++---------------+-------------+---------+------------------+---------------+---------------------+
+| USD           | INR         | 100.00  |      8350.000000 |  83.500000    | 2026-05-22 06:30:01 |
+| EUR           | GBP         | 200.00  |       171.739130 |   0.858696    | 2026-05-22 06:28:44 |
+| INR           | EUR         | 1000.00 |        11.017964 |   0.011018    | 2026-05-22 06:27:10 |
++---------------+-------------+---------+------------------+---------------+---------------------+
+```
+
+---
+
 *Submitted by: Bhavna Sharma | GitHub: Bhavnasharma27/CurrencyConverter*
